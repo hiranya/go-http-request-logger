@@ -41,6 +41,11 @@ func handler(p *httputil.ReverseProxy) func(http.ResponseWriter, *http.Request) 
 		dump, _ := httputil.DumpRequest(r, true)
 		fmt.Println(string(dump))
 
+		// You can optionally capture/wrap the transport if that's necessary (for
+			// instance, if the transport has been replaced by middleware). Example:
+			// proxy.Transport = &myTransport{proxy.Transport}
+		p.Transport = &myTransport{}
+
 		p.ServeHTTP(w, r)
 	}
 }
@@ -67,4 +72,31 @@ func extractBodyFromRequestDump(dump []byte) string {
 	}
 
 	return body.String()
+}
+
+type myTransport struct {
+	// Uncomment this if you want to capture the transport
+	// CapturedTransport http.RoundTripper
+}
+
+
+func (t *myTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := http.DefaultTransport.RoundTrip(request)
+	// or, if you captured the transport
+	// response, err := t.CapturedTransport.RoundTrip(request)
+
+	// The httputil package provides a DumpResponse() func that will copy the
+	// contents of the body into a []byte and return it. It also wraps it in an
+	// ioutil.NopCloser and sets up the response to be passed on to the client.
+	body, err := httputil.DumpResponse(response, true)
+	if err != nil {
+		// copying the response body did not work
+		return nil, err
+	}
+
+	// You may want to check the Content-Type header to decide how to deal with
+	// the body. In this case, we're assuming it's text.
+	fmt.Println("HTTP response from proxyied server : "+string(body))
+
+	return response, err
 }
